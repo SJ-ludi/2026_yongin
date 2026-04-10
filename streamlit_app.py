@@ -93,14 +93,14 @@ if "current_working_prompt" in st.session_state:
                     }
                     
                     # 2. 이미지가 있다면 '파일 객체'를 전달
-if img:
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    from google.genai import types
-    video_args["image"] = types.Image(
-        image_bytes=buf.getvalue(),
-        mime_type="image/png"
-    )
+                    if img:
+                        buf = io.BytesIO()
+                        img.save(buf, format="PNG")
+                        from google.genai import types
+                        video_args["image"] = types.Image(
+                             image_bytes=buf.getvalue(),
+                            mime_type="image/png"
+                        )
 
                         # 에러의 핵심: 딕셔너리가 아니라 파일 객체 자체를 할당
                         video_args["image"] = temp_file
