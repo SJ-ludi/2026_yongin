@@ -1,6 +1,6 @@
 import streamlit as st
 from google import genai
-from PIL import Image  # 이미지를 예쁘게 포장해줄 도구
+from PIL import Image
 import io
 import time
 
@@ -20,10 +20,9 @@ with st.sidebar:
     st.header("📂 이미지 업로드")
     uploaded_file = st.file_uploader("참고할 이미지를 올려주세요 (I2I, I2V용)", type=["png", "jpg", "jpeg"])
     
-    img_for_ai = None # AI에게 줄 포장된 이미지
+    img_for_ai = None
     if uploaded_file:
         st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
-        # [수정포인트] raw bytes가 아니라 PIL Image 객체로 변환
         img_for_ai = Image.open(uploaded_file)
 
 # 4. 기억 장치 초기화
@@ -51,14 +50,13 @@ if st.session_state.current_prompt:
         mode_text = "🖼️ 이미지 변형(I2I)" if img_for_ai else "🖼️ 이미지 생성"
         mode_video = "🎬 영상 변환(I2V)" if img_for_ai else "🎬 영상 생성"
         
-        st.write(f"🔍 **'{st.session_state.current_prompt}'**(으)로 시작할까요?")
+        st.write(f"{st.session_state.current_prompt} 작업을 시작할까?")
         col1, col2 = st.columns(2)
         
-        # --- [이미지 생성/변형 (I2I)] ---
+        # 이미지 생성/변형
         if col1.button(mode_text, use_container_width=True):
             try:
                 with st.spinner("이미지 작업 중..."):
-                    # [수정포인트] 이미지가 있으면 [그림, 글자] 순서로 리스트를 만들어 전달
                     contents = [img_for_ai, st.session_state.current_prompt] if img_for_ai else st.session_state.current_prompt
                     
                     response = client.models.generate_content(
@@ -73,21 +71,24 @@ if st.session_state.current_prompt:
             except Exception as e:
                 st.error(f"이미지 오류 발생: {e}")
 
-        # --- [영상 생성/변환 (I2V)] ---
+        # 영상 생성/변환
         if col2.button(mode_video, use_container_width=True):
             try:
-                with st.spinner("비디오 작업 중... (약 1~2분 소요)"):
+                with st.spinner("비디오 작업 중... (약 1분 소요)"):
                     if img_for_ai:
-                        # [I2V 전용 로직] 이미지를 파일로 먼저 업로드한 후 참조함 (가장 안정적인 방식)
-                        # 임시로 이미지 바이트 추출
                         img_byte_arr = io.BytesIO()
-                        img_for_ai.save(img_byte_arr, format='PNG')
-                        temp_file = client.files.upload(file=io.BytesIO(img_byte_arr.getvalue()))
+                        img_for_ai.save(img_byte_arr, format="PNG")
+                        
+                        # [핵심 수정] mime_type을 명시해서 파일 정체를 알려줌
+                        temp_file = client.files.upload(
+                            file=io.BytesIO(img_byte_arr.getvalue()),
+                            config={"mime_type": "image/png"}
+                        )
                         
                         operation = client.models.generate_videos(
                             model="veo-3.1-lite-generate-preview",
                             prompt=st.session_state.current_prompt,
-                            input_file=temp_file, # 업로드된 파일 참조
+                            input_file=temp_file,
                             config={"aspect_ratio": "16:9"}
                         )
                     else:
