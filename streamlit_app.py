@@ -42,16 +42,17 @@ if st.session_state.current_prompt:
         # --- 이미지 생성 ---
         if col1.button("🖼️ 이미지 생성", use_container_width=True):
             try:
-                with st.spinner("이미지를 그리는 중..."):
-                    response = client.models.generate_content(
-                        model="imagen-3.0-generate-002",
-                        contents=st.session_state.current_prompt
-                    )
-                    # 이미지는 보통 inline_data로 바로 옴
+with st.spinner("Nano Banana 2가 그림을 그리는 중..."):
+                    model = genai.GenerativeModel('gemini-3.1-flash-image-preview')
+                    response = model.generate_content(st.session_state.current_prompt)
                     image_data = response.candidates[0].content.parts[0].inline_data.data
                     
-                    st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": image_data})
-                    st.session_state.current_prompt = None
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": "이미지가 완성됐어!", 
+                        "image": image_data
+                    })
+                    st.session_state.current_prompt = None # 작업 완료 후 초기화
                     st.rerun()
             except Exception as e:
                 st.error(f"이미지 오류: {e}")
