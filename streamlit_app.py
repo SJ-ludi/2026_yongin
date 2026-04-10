@@ -85,25 +85,21 @@ if "current_working_prompt" in st.session_state:
         if col2.button("🎬 영상 생성/변환"):
             try:
                 with st.spinner("영상 제작 중..."):
-                    # 1. 기본 인자
+                    from google.genai import types
+                    
                     video_args = {
                         "model": "veo-3.1-lite-generate-preview",
                         "prompt": p,
                         "config": {"aspect_ratio": "16:9"}
                     }
                     
-                    # 2. 이미지가 있다면 '파일 객체'를 전달
                     if img:
                         buf = io.BytesIO()
                         img.save(buf, format="PNG")
-                        from google.genai import types
                         video_args["image"] = types.Image(
-                             image_bytes=buf.getvalue(),
+                            image_bytes=buf.getvalue(),
                             mime_type="image/png"
                         )
-
-                        # 에러의 핵심: 딕셔너리가 아니라 파일 객체 자체를 할당
-                        video_args["image"] = temp_file
                     
                     op = client.models.generate_videos(**video_args)
                     while not op.done:
