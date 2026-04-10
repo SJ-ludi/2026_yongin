@@ -76,10 +76,8 @@ if "current_working_prompt" in st.session_state:
                         contents=contents,
                         config=types.GenerateContentConfig(
                             response_modalities=["image", "text"],
-                            image_generation_config=types.ImageGenerationConfig(
-                                aspect_ratio="16:9"
-                            )
-                        )
+                            image_generation_config={"aspect_ratio": "16:9"}
+                        )                                                
                     )
                     res_data = response.candidates[0].content.parts[0].inline_data.data
                     st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
