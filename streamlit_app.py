@@ -10,7 +10,7 @@ st.title("🎬 용인 미르아이 공유학교 AI 제작소")
 
 # 2. API 설정
 if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("설정에서 API 키를 넣어줘")
+    st.error("설정에서 API 키를 넣어주세요")
     st.stop()
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -49,7 +49,7 @@ if uploaded_file:
     img_for_ai = raw_img
 
 # 6. 입력창
-if prompt := st.chat_input("설명을 입력하고 엔터를 눌러줘"):
+if prompt := st.chat_input("설명을 입력하고 엔터를 눌러주세요."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.current_working_prompt = prompt
     st.session_state.current_working_img = img_for_ai
@@ -62,25 +62,32 @@ if "current_working_prompt" in st.session_state:
         p = st.session_state.current_working_prompt
         img = st.session_state.current_working_img
         
-        st.write(f"{p} 작업을 시작할까?")
+        st.write(f"{p} 작업을 시작할까요?")
         col1, col2 = st.columns(2)
+                
+        # 이미지 생성/변형
+            if col1.button("🖼️ 이미지 생성/변형"):
+                try:
+                    with st.spinner("그리는 중..."):
+                        from google.genai import types
+                        contents = [img, p] if img else p
+                        response = client.models.generate_content(
+                            model="gemini-3.1-flash-image-preview", 
+                            contents=contents,
+                            config=types.GenerateContentConfig(
+                                response_modalities=["image", "text"],
+                                image_generation_config=types.ImageGenerationConfig(
+                                    aspect_ratio="16:9"
+                                )
+                            )
+                        )
+                        res_data = response.candidates[0].content.parts[0].inline_data.data
+                        st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
+                        del st.session_state.current_working_prompt
+                        st.rerun()
+        except Exception as e:
+            st.error(f"오류: {e}")
         
-        # 이미지 생성/변형 (검증 완료)
-        if col1.button("🖼️ 이미지 생성/변형"):
-            try:
-                with st.spinner("그리는 중..."):
-                    contents = [img, p] if img else p
-                    response = client.models.generate_content(
-                        model="gemini-3.1-flash-image-preview", 
-                        contents=contents
-                    )
-                    res_data = response.candidates[0].content.parts[0].inline_data.data
-                    st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
-                    del st.session_state.current_working_prompt
-                    st.rerun()
-            except Exception as e:
-                st.error(f"오류: {e}")
-
         # 영상 생성/변환 (최종 수정!)
         if col2.button("🎬 영상 생성/변환"):
             try:
