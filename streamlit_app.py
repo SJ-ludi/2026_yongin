@@ -5,13 +5,13 @@ import time
 # 1. 사이트 설정
 st.set_page_config(page_title="용인 AI 영상 제작소", layout="centered")
 st.title("🎬 용인 미르아이 공유학교 AI 영상 제작소")
+st.markdown("---")
 
 # 2. 최신형 Client 설정
 if "GOOGLE_API_KEY" not in st.secrets:
     st.error("Secrets 설정에서 GOOGLE_API_KEY를 입력해주세요.")
     st.stop()
 
-# 찾아오신 최신 SDK 방식 사용
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # 3. 기억 장치 초기화
@@ -36,14 +36,13 @@ if prompt := st.chat_input("상상하는 장면을 설명해주세요!"):
 # 6. 작업 선택 상자
 if st.session_state.current_prompt:
     with st.chat_message("assistant"):
-        st.write(f"'{st.session_state.current_prompt}'(으)로 무엇을 만들까요?")
+        st.write(f"🔍 **'{st.session_state.current_prompt}'**(으)로 무엇을 만들까요?")
         col1, col2 = st.columns(2)
         
         # --- 이미지 생성 ---
-        if col1.button("🖼️ 이미지 생성"):
+        if col1.button("🖼️ 이미지 생성", use_container_width=True):
             try:
                 with st.spinner("이미지를 그리는 중..."):
-                    # 최신 SDK의 이미지 생성 방식
                     response = client.models.generate_content(
                         model="imagen-3.0-generate-002",
                         contents=st.session_state.current_prompt
@@ -56,18 +55,20 @@ if st.session_state.current_prompt:
             except Exception as e:
                 st.error(f"이미지 오류: {e}")
 
-# --- 영상 생성 (설정을 최소화해서 에러 방지) ---
-        if col2.button("🎬 영상 생성"):
+        # --- 영상 생성 (에러 걱정 없는 최소 설정 버전) ---
+        if col2.button("🎬 영상 생성", use_container_width=True):
             try:
-                with st.spinner("비디오를 생성 중입니다. (약 1분 소요)"):
-                    # 설정을 복잡하게 넣지 않고 기본값으로 요청!
+                with st.spinner("비디오를 생성 중입니다. (약 1~2분 소요)"):
+                    # 까다로운 duration_seconds를 빼고, 모델이 알아서 결정하게 함
                     operation = client.models.generate_videos(
                         model="veo-3.1-lite-generate-preview",
                         prompt=st.session_state.current_prompt,
-                        # config 부분을 최소화하거나 아예 빼버려도 돼!
-                        config={"aspect_ratio": "16:9"} 
+                        config={
+                            "aspect_ratio": "16:9" # 화면 비율만 고정
+                        },
                     )
                     
+                    # 진행 상황 표시 (진동벨 시스템)
                     while not operation.done:
                         time.sleep(5)
                         operation = client.operations.get(operation)
@@ -78,4 +79,5 @@ if st.session_state.current_prompt:
                     st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
+                # 에러가 나면 어떤 부분에서 났는지 더 상세히 보여줌
                 st.error(f"비디오 오류 발생: {e}")
