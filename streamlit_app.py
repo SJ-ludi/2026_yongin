@@ -1,11 +1,11 @@
 import streamlit as st
 from google import genai
-import time
-from PIL import Image
+from PIL import Image  # 이미지를 예쁘게 포장해줄 도구
 import io
+import time
 
 # 1. 사이트 설정
-st.set_page_config(page_title="용인 AI 영상 제작소", layout="wide") # 넓게 보기
+st.set_page_config(page_title="용인 AI 영상 제작소", layout="wide")
 st.title("🎨 용인 미르아이 공유학교 멀티모달 제작소")
 
 # 2. API 설정
@@ -15,16 +15,16 @@ if "GOOGLE_API_KEY" not in st.secrets:
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# 3. 사이드바 - 이미지 업로드 기능
+# 3. 사이드바 - 이미지 업로드 및 포장
 with st.sidebar:
     st.header("📂 이미지 업로드")
     uploaded_file = st.file_uploader("참고할 이미지를 올려주세요 (I2I, I2V용)", type=["png", "jpg", "jpeg"])
+    
+    img_for_ai = None # AI에게 줄 포장된 이미지
     if uploaded_file:
         st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
-        # 이미지를 AI가 읽을 수 있는 바이트 형태로 변환
-        img_bytes = uploaded_file.getvalue()
-    else:
-        img_bytes = None
+        # [수정포인트] raw bytes가 아니라 PIL Image 객체로 변환
+        img_for_ai = Image.open(uploaded_file)
 
 # 4. 기억 장치 초기화
 if "messages" not in st.session_state:
@@ -40,30 +40,30 @@ for msg in st.session_state.messages:
         if "video" in msg: st.video(msg["video"])
 
 # 6. 입력창
-if prompt := st.chat_input("이미지에 대한 설명이나 만들고 싶은 장면을 적어주세요!"):
+if prompt := st.chat_input("설명을 적어주세요! (예: 이 공을 유니콘이 차고 있어)"):
     st.session_state.current_prompt = prompt
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
-# 7. 작업 선택 버튼
+# 7. 작업 버튼
 if st.session_state.current_prompt:
     with st.chat_message("assistant"):
-        mode_text = "🖼️ 이미지 변형(I2I)" if img_bytes else "🖼️ 이미지 생성"
-        mode_video = "🎬 영상 변환(I2V)" if img_bytes else "🎬 영상 생성"
+        mode_text = "🖼️ 이미지 변형(I2I)" if img_for_ai else "🖼️ 이미지 생성"
+        mode_video = "🎬 영상 변환(I2V)" if img_for_ai else "🎬 영상 생성"
         
-        st.write(f"🔍 **'{st.session_state.current_prompt}'**(으)로 작업을 시작할까요?")
+        st.write(f"🔍 **'{st.session_state.current_prompt}'**(으)로 시작할까요?")
         col1, col2 = st.columns(2)
         
         # --- [이미지 생성/변형 (I2I)] ---
         if col1.button(mode_text, use_container_width=True):
             try:
                 with st.spinner("이미지 작업 중..."):
-                    # 이미지가 있으면 [이미지, 텍스트] 전달, 없으면 [텍스트]만 전달
-                    content_list = [img_bytes, st.session_state.current_prompt] if img_bytes else st.session_state.current_prompt
+                    # [수정포인트] 이미지가 있으면 [그림, 글자] 순서로 리스트를 만들어 전달
+                    contents = [img_for_ai, st.session_state.current_prompt] if img_for_ai else st.session_state.current_prompt
                     
                     response = client.models.generate_content(
                         model="gemini-3.1-flash-image-preview", 
-                        contents=content_list
+                        contents=contents
                     )
                     res_img = response.candidates[0].content.parts[0].inline_data.data
                     
@@ -71,29 +71,31 @@ if st.session_state.current_prompt:
                     st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
-                st.error(f"이미지 오류: {e}")
+                st.error(f"이미지 오류 발생: {e}")
 
         # --- [영상 생성/변환 (I2V)] ---
         if col2.button(mode_video, use_container_width=True):
             try:
-                with st.spinner("비디오 작업 중... (약 1분 소요)"):
-                    # Veo 모델에 이미지와 프롬프트를 함께 전달
-                    # (SDK 버전에 따라 파라미터가 다를 수 있으나, 일반적으로 prompt에 포함하거나 전용 필드 사용)
-                    video_args = {
-                        "model": "veo-3.1-lite-generate-preview",
-                        "prompt": st.session_state.current_prompt,
-                        "config": {"aspect_ratio": "16:9"}
-                    }
-                    
-                    # 이미지가 있을 경우 input_file 등으로 전달 (2026 SDK 표준)
-                    if img_bytes:
-                        # 텍스트와 이미지를 리스트로 묶어서 전달하는 방식 시도
+                with st.spinner("비디오 작업 중... (약 1~2분 소요)"):
+                    if img_for_ai:
+                        # [I2V 전용 로직] 이미지를 파일로 먼저 업로드한 후 참조함 (가장 안정적인 방식)
+                        # 임시로 이미지 바이트 추출
+                        img_byte_arr = io.BytesIO()
+                        img_for_ai.save(img_byte_arr, format='PNG')
+                        temp_file = client.files.upload(file=io.BytesIO(img_byte_arr.getvalue()))
+                        
                         operation = client.models.generate_videos(
-                            **video_args,
-                            input_file=img_bytes # 이미지를 참조 영상/이미지로 사용
+                            model="veo-3.1-lite-generate-preview",
+                            prompt=st.session_state.current_prompt,
+                            input_file=temp_file, # 업로드된 파일 참조
+                            config={"aspect_ratio": "16:9"}
                         )
                     else:
-                        operation = client.models.generate_videos(**video_args)
+                        operation = client.models.generate_videos(
+                            model="veo-3.1-lite-generate-preview",
+                            prompt=st.session_state.current_prompt,
+                            config={"aspect_ratio": "16:9"}
+                        )
                     
                     while not operation.done:
                         time.sleep(5)
@@ -106,4 +108,4 @@ if st.session_state.current_prompt:
                     st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
-                st.error(f"비디오 오류: {e}")
+                st.error(f"비디오 오류 발생: {e}")
