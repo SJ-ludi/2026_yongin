@@ -3,21 +3,26 @@ from google import genai
 from PIL import Image
 import io
 import time
+import base64 # 사진을 암호로 바꾸기 위해 필요함
 
+# 1. 페이지 설정
 st.set_page_config(page_title="용인 AI 제작소", layout="centered")
 st.title("🎬 용인 미르아이 공유학교 AI 제작소")
 
+# 2. API 설정
 if "GOOGLE_API_KEY" not in st.secrets:
     st.error("설정에서 API 키를 넣어줘")
     st.stop()
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
+# 3. 세션 상태 관리
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
+# 4. 대화 기록 표시
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
@@ -26,8 +31,8 @@ for msg in st.session_state.messages:
 
 st.markdown("---")
 
+# 5. 이미지 업로드 구역
 preview_container = st.container()
-
 uploaded_file = st.file_uploader(
     "이미지 추가 (+)", 
     type=["png", "jpg", "jpeg", "webp"], 
@@ -43,6 +48,7 @@ if uploaded_file:
         st.image(raw_img, width=150, caption="사용될 이미지")
     img_for_ai = raw_img
 
+# 6. 입력창
 if prompt := st.chat_input("설명을 입력하고 엔터를 눌러줘"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.current_working_prompt = prompt
@@ -50,6 +56,7 @@ if prompt := st.chat_input("설명을 입력하고 엔터를 눌러줘"):
     st.session_state.uploader_key += 1
     st.rerun()
 
+# 7. 실행 버튼 등장
 if "current_working_prompt" in st.session_state:
     with st.chat_message("assistant"):
         p = st.session_state.current_working_prompt
@@ -58,7 +65,7 @@ if "current_working_prompt" in st.session_state:
         st.write(f"{p} 작업을 시작할까?")
         col1, col2 = st.columns(2)
         
-        # 이미지 생성/변형 (이미 성공한 로직)
+        # 이미지 생성/변형 (검증된 로직)
         if col1.button("🖼️ 이미지 생성/변형"):
             try:
                 with st.spinner("이미지 작업 중..."):
@@ -74,11 +81,10 @@ if "current_working_prompt" in st.session_state:
             except Exception as e:
                 st.error(f"오류: {e}")
 
-        # 영상 생성/변환 (에러 수정 지점!)
+        # 영상 생성/변환 (에러 해결 지점)
         if col2.button("🎬 영상 생성/변환"):
             try:
                 with st.spinner("영상 제작 중..."):
-                    # 기본 인자 설정
                     video_args = {
                         "model": "veo-3.1-lite-generate-preview",
                         "prompt": p,
@@ -86,14 +92,17 @@ if "current_working_prompt" in st.session_state:
                     }
                     
                     if img:
-                        img_byte_arr = io.BytesIO()
-                        img.save(img_byte_arr, format='PNG')
-                        temp_file = client.files.upload(
-                            file=io.BytesIO(img_byte_arr.getvalue()), 
-                            config={"mime_type": "image/png"}
-                        )
-                        # [핵심 수정] input_file 대신 image라는 이름을 써야 함!
-                        video_args["image"] = temp_file
+                        # [핵심] 사진을 Base64 데이터 구조로 변환
+                        buf = io.BytesIO()
+                        img.save(buf, format="PNG")
+                        img_bytes = buf.getvalue()
+                        encoded_img = base64.b64encode(img_bytes).decode("utf-8")
+                        
+                        # 서버가 요구하는 정확한 딕셔너리 구조로 전달
+                        video_args["image"] = {
+                            "bytes_base64_encoded": encoded_img,
+                            "mime_type": "image/png"
+                        }
                     
                     op = client.models.generate_videos(**video_args)
                     while not op.done:
