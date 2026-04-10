@@ -65,6 +65,7 @@ if "current_working_prompt" in st.session_state:
         st.write(f"{p} 작업을 시작할까요?")
         col1, col2 = st.columns(2)
                 
+        
         # 이미지 생성/변형
         if col1.button("🖼️ 이미지 생성/변형"):
             try:
@@ -72,7 +73,7 @@ if "current_working_prompt" in st.session_state:
                     from google.genai import types
                     contents = [img, p] if img else p
                     response = client.models.generate_content(
-                        model="gemini-3.1-flash-image-preview", 
+                        model="gemini-3.1-flash-image-preview",
                         contents=contents,
                         config=types.GenerateContentConfig(
                             response_modalities=["image", "text"],
@@ -80,12 +81,14 @@ if "current_working_prompt" in st.session_state:
                                 aspect_ratio="16:9"
                             )
                         )
+                    )
                     res_data = response.candidates[0].content.parts[0].inline_data.data
                     st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
                     del st.session_state.current_working_prompt
                     st.rerun()
             except Exception as e:
-                st.error(f"오류: {e}")
+                st.error(f"오류: {e}")        
+        
         
         # 영상 생성/변환 (최종 수정!)
         if col2.button("🎬 영상 생성/변환"):
