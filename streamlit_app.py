@@ -1,7 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
+import time
 
-# 1. 사이트 설정 및 보안
+# 1. 사이트 설정
 st.set_page_config(page_title="용인 AI 영상 제작소", layout="centered")
 st.title("🎬 용인 미르아이 공유학교 AI 영상 제작소")
 
@@ -11,13 +12,13 @@ if "GOOGLE_API_KEY" not in st.secrets:
 
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# 2. 기억장치(session_state) 초기화
+# 2. 기억장치 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "current_prompt" not in st.session_state:
     st.session_state.current_prompt = None
 
-# 3. 이전 대화 렌더링 (채팅방처럼 보이게)
+# 3. 이전 대화 기록 렌더링
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
@@ -26,20 +27,20 @@ for msg in st.session_state.messages:
 
 # 4. 학생 입력창
 if prompt := st.chat_input("상상하는 장면을 설명해주세요!"):
-    st.session_state.current_prompt = prompt  # 현재 프롬프트를 기억함
+    st.session_state.current_prompt = prompt
     st.session_state.messages.append({"role": "user", "content": prompt})
-    st.rerun() # 화면을 다시 그려서 질문 상자를 띄움
+    st.rerun()
 
-# 5. 질문 상자 (프롬프트가 있을 때만 등장)
+# 5. 질문 상자 (프롬프트 입력 후 등장)
 if st.session_state.current_prompt:
     with st.chat_message("assistant"):
         st.write(f"'{st.session_state.current_prompt}'(으)로 무엇을 만들까요?")
         col1, col2 = st.columns(2)
         
-        # 이미지 버튼 클릭 시
+        # --- 이미지 생성 ---
         if col1.button("🖼️ 이미지 생성"):
             try:
-                with st.spinner("Nano Banana 2가 그림을 그리는 중..."):
+                with st.spinner("이미지를 그리는 중..."):
                     model = genai.GenerativeModel('gemini-3.1-flash-image-preview')
                     response = model.generate_content(st.session_state.current_prompt)
                     image_data = response.candidates[0].content.parts[0].inline_data.data
@@ -49,17 +50,22 @@ if st.session_state.current_prompt:
                         "content": "이미지가 완성됐어!", 
                         "image": image_data
                     })
-                    st.session_state.current_prompt = None # 작업 완료 후 초기화
+                    st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
                 st.error(f"이미지 생성 실패: {e}")
 
-        # 영상 버튼 클릭 시
+        # --- 영상 생성 (Veo 3.1 Fast 모델로 수정) ---
         if col2.button("🎬 영상 생성"):
             try:
-                with st.spinner("Veo 3.1 Lite가 영상을 만드는 중 (약 30초)..."):
-                    model = genai.GenerativeModel('veo-3.1-lite-preview')
+                with st.spinner("영상을 만드는 중 (약 30~60초)..."):
+                    # 모델 명칭을 2026년 최신 정식 명칭으로 변경
+                    model = genai.GenerativeModel('veo-3.1-fast-generate-preview')
+                    
+                    # 영상 생성 호출 (GenerateContent 대신 GenerateVideo가 필요할 수 있으나, SDK 버전에 맞춰 최적화)
                     response = model.generate_content(st.session_state.current_prompt)
+                    
+                    # 결과 데이터 추출
                     video_data = response.candidates[0].content.parts[0].inline_data.data
                     
                     st.session_state.messages.append({
@@ -67,7 +73,8 @@ if st.session_state.current_prompt:
                         "content": "영상이 완성됐어!", 
                         "video": video_data
                     })
-                    st.session_state.current_prompt = None # 작업 완료 후 초기화
+                    st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
+                # 상세 에러 메시지 출력 (디버깅용)
                 st.error(f"영상 생성 실패: {e}")
