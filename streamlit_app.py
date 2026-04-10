@@ -4,109 +4,100 @@ from PIL import Image
 import io
 import time
 
-# 1. 사이트 설정
-st.set_page_config(page_title="용인 AI 영상 제작소", layout="wide")
-st.title("🎨 용인 미르아이 공유학교 멀티모달 제작소")
+st.set_page_config(page_title="용인 미르아이 공유학교 AI 제작소", layout="centered")
+st.title("🎬 용인 미르아이 공유학교 AI 제작소")
 
-# 2. API 설정
 if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("Secrets 설정에서 GOOGLE_API_KEY를 입력해주세요.")
+    st.error("설정에서 API 키를 넣어줘")
     st.stop()
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# 3. 사이드바 - 이미지 업로드 및 포장
-with st.sidebar:
-    st.header("📂 이미지 업로드")
-    uploaded_file = st.file_uploader("참고할 이미지를 올려주세요 (I2I, I2V용)", type=["png", "jpg", "jpeg"])
-    
-    img_for_ai = None
-    if uploaded_file:
-        st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
-        img_for_ai = Image.open(uploaded_file)
-
-# 4. 기억 장치 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "current_prompt" not in st.session_state:
-    st.session_state.current_prompt = None
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
-# 5. 채팅 내역 그리기
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
         if "image" in msg: st.image(msg["image"])
         if "video" in msg: st.video(msg["video"])
 
-# 6. 입력창
-if prompt := st.chat_input("설명을 적어주세요! (예: 이 공을 유니콘이 차고 있어)"):
-    st.session_state.current_prompt = prompt
+st.markdown("---")
+
+preview_container = st.container()
+
+# webp를 허용 목록에 추가했어
+uploaded_file = st.file_uploader(
+    "이미지 추가 (+)", 
+    type=["png", "jpg", "jpeg", "webp"], 
+    key=f"up_{st.session_state.uploader_key}",
+    label_visibility="collapsed"
+)
+
+img_for_ai = None
+if uploaded_file:
+    raw_img = Image.open(uploaded_file)
+    # 메모리 절약을 위해 이미지 크기를 최대 1024px로 제한
+    raw_img.thumbnail((1024, 1024))
+    with preview_container:
+        st.image(raw_img, width=150, caption="사용될 이미지")
+    img_for_ai = raw_img
+
+if prompt := st.chat_input("설명을 입력하고 엔터를 눌러줘"):
     st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.current_working_prompt = prompt
+    st.session_state.current_working_img = img_for_ai
+    # 다음 입력을 위해 업로더 초기화
+    st.session_state.uploader_key += 1
     st.rerun()
 
-# 7. 작업 버튼
-if st.session_state.current_prompt:
+if "current_working_prompt" in st.session_state:
     with st.chat_message("assistant"):
-        mode_text = "🖼️ 이미지 변형(I2I)" if img_for_ai else "🖼️ 이미지 생성"
-        mode_video = "🎬 영상 변환(I2V)" if img_for_ai else "🎬 영상 생성"
+        p = st.session_state.current_working_prompt
+        img = st.session_state.current_working_img
         
-        st.write(f"{st.session_state.current_prompt} 작업을 시작할까?")
+        st.write(f"{p} 작업을 시작할까?")
         col1, col2 = st.columns(2)
         
-        # 이미지 생성/변형
-        if col1.button(mode_text, use_container_width=True):
+        if col1.button("🖼️ 이미지 생성/변형"):
             try:
                 with st.spinner("이미지 작업 중..."):
-                    contents = [img_for_ai, st.session_state.current_prompt] if img_for_ai else st.session_state.current_prompt
-                    
+                    contents = [img, p] if img else p
                     response = client.models.generate_content(
                         model="gemini-3.1-flash-image-preview", 
                         contents=contents
                     )
-                    res_img = response.candidates[0].content.parts[0].inline_data.data
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": f"{mode_text} 완료!", "image": res_img})
-                    st.session_state.current_prompt = None
+                    res_data = response.candidates[0].content.parts[0].inline_data.data
+                    st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
+                    del st.session_state.current_working_prompt
                     st.rerun()
             except Exception as e:
-                st.error(f"이미지 오류 발생: {e}")
+                st.error(f"오류: {e}")
 
-        # 영상 생성/변환
-        if col2.button(mode_video, use_container_width=True):
+        if col2.button("🎬 영상 생성/변환"):
             try:
-                with st.spinner("비디오 작업 중... (약 1분 소요)"):
-                    if img_for_ai:
+                with st.spinner("영상 제작 중..."):
+                    args = {"model": "veo-3.1-lite-generate-preview", "prompt": p, "config": {"aspect_ratio": "16:9"}}
+                    if img:
                         img_byte_arr = io.BytesIO()
-                        img_for_ai.save(img_byte_arr, format="PNG")
-                        
-                        # [핵심 수정] mime_type을 명시해서 파일 정체를 알려줌
+                        # 어떤 포맷이 들어와도 PNG로 통일해서 안전하게 전송
+                        img.save(img_byte_arr, format='PNG')
                         temp_file = client.files.upload(
-                            file=io.BytesIO(img_byte_arr.getvalue()),
+                            file=io.BytesIO(img_byte_arr.getvalue()), 
                             config={"mime_type": "image/png"}
                         )
-                        
-                        operation = client.models.generate_videos(
-                            model="veo-3.1-lite-generate-preview",
-                            prompt=st.session_state.current_prompt,
-                            input_file=temp_file,
-                            config={"aspect_ratio": "16:9"}
-                        )
-                    else:
-                        operation = client.models.generate_videos(
-                            model="veo-3.1-lite-generate-preview",
-                            prompt=st.session_state.current_prompt,
-                            config={"aspect_ratio": "16:9"}
-                        )
+                        args["input_file"] = temp_file
                     
-                    while not operation.done:
+                    op = client.models.generate_videos(**args)
+                    while not op.done:
                         time.sleep(5)
-                        operation = client.operations.get(operation)
+                        op = client.operations.get(op)
                     
-                    video_file_ref = operation.result.generated_videos[0].video
-                    video_bytes = client.files.download(file=video_file_ref)
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": f"{mode_video} 완료!", "video": video_bytes})
-                    st.session_state.current_prompt = None
+                    v_data = client.files.download(file=op.result.generated_videos[0].video)
+                    st.session_state.messages.append({"role": "assistant", "content": "영상 완성!", "video": v_data})
+                    del st.session_state.current_working_prompt
                     st.rerun()
             except Exception as e:
-                st.error(f"비디오 오류 발생: {e}")
+                st.error(f"오류: {e}")
