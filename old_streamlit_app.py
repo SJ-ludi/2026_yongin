@@ -90,8 +90,8 @@ if "current_working_prompt" in st.session_state:
                 st.error(f"오류: {e}")        
         
         
-        # 영상 생성/변환 (20260410 한도때문에 중단시켜놓음 - 힉스필드로 교사가 생성하기로)
-        # if col2.button("🎬 영상 생성/변환"):
+        # 영상 생성/변환 
+        if col2.button("🎬 영상 생성/변환"):
             try:
                 with st.spinner("영상 제작 중..."):
                     from google.genai import types
