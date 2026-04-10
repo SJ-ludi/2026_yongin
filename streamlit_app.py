@@ -85,8 +85,8 @@ if "current_working_prompt" in st.session_state:
                     st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
                     del st.session_state.current_working_prompt
                     st.rerun()
-        except Exception as e:
-            st.error(f"오류: {e}")
+            except Exception as e:
+                st.error(f"오류: {e}")
         
         # 영상 생성/변환 (최종 수정!)
         if col2.button("🎬 영상 생성/변환"):
