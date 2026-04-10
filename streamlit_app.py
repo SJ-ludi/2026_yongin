@@ -66,25 +66,25 @@ if "current_working_prompt" in st.session_state:
         col1, col2 = st.columns(2)
                 
         # 이미지 생성/변형
-            if col1.button("🖼️ 이미지 생성/변형"):
-                try:
-                    with st.spinner("그리는 중..."):
-                        from google.genai import types
-                        contents = [img, p] if img else p
-                        response = client.models.generate_content(
-                            model="gemini-3.1-flash-image-preview", 
-                            contents=contents,
-                            config=types.GenerateContentConfig(
-                                response_modalities=["image", "text"],
-                                image_generation_config=types.ImageGenerationConfig(
-                                    aspect_ratio="16:9"
-                                )
+        if col1.button("🖼️ 이미지 생성/변형"):
+            try:
+                with st.spinner("그리는 중..."):
+                    from google.genai import types
+                    contents = [img, p] if img else p
+                    response = client.models.generate_content(
+                        model="gemini-3.1-flash-image-preview", 
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["image", "text"],
+                            image_generation_config=types.ImageGenerationConfig(
+                                aspect_ratio="16:9"
                             )
                         )
-                        res_data = response.candidates[0].content.parts[0].inline_data.data
-                        st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
-                        del st.session_state.current_working_prompt
-                        st.rerun()
+                    )
+                    res_data = response.candidates[0].content.parts[0].inline_data.data
+                    st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": res_data})
+                    del st.session_state.current_working_prompt
+                    st.rerun()
         except Exception as e:
             st.error(f"오류: {e}")
         
