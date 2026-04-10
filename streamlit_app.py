@@ -56,30 +56,26 @@ if st.session_state.current_prompt:
             except Exception as e:
                 st.error(f"이미지 오류: {e}")
 
-        # --- 영상 생성 (선생님이 찾아오신 최신 방식 적용) ---
+# --- 영상 생성 (설정을 최소화해서 에러 방지) ---
         if col2.button("🎬 영상 생성"):
             try:
-                with st.spinner("비디오를 생성 중입니다. (약 1~2분 소요)"):
-                    # 1. 비디오 생성 요청 (Operation 시작)
+                with st.spinner("비디오를 생성 중입니다. (약 1분 소요)"):
+                    # 설정을 복잡하게 넣지 않고 기본값으로 요청!
                     operation = client.models.generate_videos(
                         model="veo-3.1-lite-generate-preview",
                         prompt=st.session_state.current_prompt,
-                        config={
-                            "aspect_ratio": "16:9",
-                            "duration_seconds": 5, # 수업용이니 조금 짧게 조정
-                        },
+                        # config 부분을 최소화하거나 아예 빼버려도 돼!
+                        config={"aspect_ratio": "16:9"} 
                     )
                     
-                    # 2. 대기 (Operation이 완료될 때까지)
                     while not operation.done:
                         time.sleep(5)
                         operation = client.operations.get(operation)
                     
-                    # 3. 결과 가져오기
                     video_data = operation.result.generated_videos[0].video.data
                     
                     st.session_state.messages.append({"role": "assistant", "content": "비디오 완성!", "video": video_data})
                     st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
-                st.error(f"비디오 오류: {e}")
+                st.error(f"비디오 오류 발생: {e}")
