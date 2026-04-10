@@ -47,6 +47,7 @@ if st.session_state.current_prompt:
                         model="imagen-3.0-generate-002",
                         contents=st.session_state.current_prompt
                     )
+                    # 이미지는 보통 inline_data로 바로 옴
                     image_data = response.candidates[0].content.parts[0].inline_data.data
                     
                     st.session_state.messages.append({"role": "assistant", "content": "이미지 완성!", "image": image_data})
@@ -55,29 +56,30 @@ if st.session_state.current_prompt:
             except Exception as e:
                 st.error(f"이미지 오류: {e}")
 
-        # --- 영상 생성 (에러 걱정 없는 최소 설정 버전) ---
+        # --- 영상 생성 (다운로드 로직 보강) ---
         if col2.button("🎬 영상 생성", use_container_width=True):
             try:
                 with st.spinner("비디오를 생성 중입니다. (약 1~2분 소요)"):
-                    # 까다로운 duration_seconds를 빼고, 모델이 알아서 결정하게 함
                     operation = client.models.generate_videos(
                         model="veo-3.1-lite-generate-preview",
                         prompt=st.session_state.current_prompt,
-                        config={
-                            "aspect_ratio": "16:9" # 화면 비율만 고정
-                        },
+                        config={"aspect_ratio": "16:9"} 
                     )
                     
-                    # 진행 상황 표시 (진동벨 시스템)
                     while not operation.done:
                         time.sleep(5)
                         operation = client.operations.get(operation)
                     
-                    video_data = operation.result.generated_videos[0].video.data
+                    # [수정 포인트] 비디오 파일 객체를 가져와서 실제로 다운로드함
+                    video_file_ref = operation.result.generated_videos[0].video
+                    video_bytes = client.files.download(file=video_file_ref)
                     
-                    st.session_state.messages.append({"role": "assistant", "content": "비디오 완성!", "video": video_data})
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": "비디오 완성!", 
+                        "video": video_bytes
+                    })
                     st.session_state.current_prompt = None
                     st.rerun()
             except Exception as e:
-                # 에러가 나면 어떤 부분에서 났는지 더 상세히 보여줌
                 st.error(f"비디오 오류 발생: {e}")
