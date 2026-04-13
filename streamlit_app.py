@@ -3,7 +3,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 import io
-import time
+import base64
 from runwayml import RunwayML
 
 # 1. 사이트 설정
@@ -23,6 +23,15 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
+
+
+def pil_to_data_uri(img: Image.Image) -> str:
+    """PIL 이미지를 base64 data URI로 변환 (Runway API용)"""
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/jpeg;base64,{b64}"
+
 
 # 4. 좌우 분할 레이아웃
 left_col, right_col = st.columns([1, 1])
@@ -49,70 +58,89 @@ with left_col:
     # 프롬프트 입력
     prompt = st.text_input("무엇을 만들고 싶나요?", placeholder="예: 우주를 유영하는 고양이")
 
+    # 참고 이미지 유무에 따른 모드 안내
+    if img_for_ai:
+        st.info("📎 참고 이미지 있음 → 이미지 기반 생성 (이미지→이미지 / 이미지→영상)")
+    else:
+        st.info("✏️ 텍스트만 입력 → 텍스트 기반 생성 (텍스트→이미지 / 텍스트→영상)")
+
     btn_col1, btn_col2 = st.columns(2)
 
-    # 이미지 생성 버튼
+    # ===== 이미지 생성 버튼 (Gemini) =====
     if btn_col1.button("✨ 이미지 생성", use_container_width=True):
         if not prompt:
             st.warning("설명을 입력해주세요!")
         else:
             try:
-                with st.spinner("이미지를 그리는 중..."):
+                mode = "이미지→이미지" if img_for_ai else "텍스트→이미지"
+                with st.spinner(f"[{mode}] 이미지를 그리는 중..."):
                     contents = [img_for_ai, prompt] if img_for_ai else prompt
                     response = gemini_client.models.generate_content(
-                        model="gemini-3.1-flash-image-preview",
+                        model="gemini-2.0-flash-preview-image-generation",
                         contents=contents,
                         config=types.GenerateContentConfig(
                             response_modalities=["image", "text"],
-                            image_config=types.ImageConfig(aspect_ratio="16:9")
-                        )
+                            image_config=types.ImageConfig(aspect_ratio="16:9"),
+                        ),
                     )
                     res_data = response.candidates[0].content.parts[0].inline_data.data
-                    st.session_state.messages.append({
-                        "role": "user",
-                        "type": "image",
-                        "content": prompt,
-                        "data": res_data
-                    })
+                    st.session_state.messages.append(
+                        {
+                            "role": "user",
+                            "type": "image",
+                            "content": f"[{mode}] {prompt}",
+                            "data": res_data,
+                        }
+                    )
                     st.session_state.uploader_key += 1
                     st.rerun()
             except Exception as e:
                 st.error(f"이미지 생성 오류: {e}")
 
-    # 영상 생성 버튼 (Runway API 연동)
+    # ===== 영상 생성 버튼 (Runway) =====
     if btn_col2.button("🎥 영상 생성", use_container_width=True):
         if not prompt:
             st.warning("설명을 입력해주세요!")
         else:
             try:
-                with st.spinner("영상을 만드는 중 (약 1분 소요)..."):
-                    # 실제 환경에서는 이미지를 URL로 변환하여 넘겨야 하지만 
-                    # 여기서는 텍스트 기반 생성을 기본으로 구조를 잡았어.
-                    # 이미지 투 비디오를 위해서는 이미지를 어딘가 업로드하고 그 URL을 보내야 해.
-                    
-                    task = runway_client.image_to_video.create(
-                        model='gen3a_turbo',
-                        prompt_text=prompt
-                        # 만약 이미지 투 비디오를 하려면 prompt_image 매개변수에 URL이 들어가야 함
-                    )
-                    
-                    # 작업 완료 대기 (폴링)
-                    while task.status not in ['SUCCEEDED', 'FAILED']:
-                        time.sleep(3)
-                        task = runway_client.tasks.retrieve(task.id)
-                    
-                    if task.status == 'SUCCEEDED':
-                        video_url = task.output[0]
-                        st.session_state.messages.append({
-                            "role": "user",
-                            "type": "video",
-                            "content": prompt,
-                            "data": video_url
-                        })
-                        st.session_state.uploader_key += 1
-                        st.rerun()
-                    else:
-                        st.error("영상 생성에 실패했어.")
+                if img_for_ai:
+                    # 이미지→영상
+                    mode = "이미지→영상"
+                    data_uri = pil_to_data_uri(img_for_ai)
+                    with st.spinner(f"[{mode}] 영상을 만드는 중 (1~2분 소요)..."):
+                        task = runway_client.image_to_video.create(
+                            model="gen4_turbo",
+                            prompt_image=data_uri,
+                            prompt_text=prompt,
+                            ratio="1280:720",
+                            duration=5,
+                        )
+                        task = task.wait_for_task_output()
+                else:
+                    # 텍스트→영상
+                    mode = "텍스트→영상"
+                    with st.spinner(f"[{mode}] 영상을 만드는 중 (1~2분 소요)..."):
+                        task = runway_client.image_to_video.create(
+                            model="gen4_turbo",
+                            prompt_text=prompt,
+                            ratio="1280:720",
+                            duration=5,
+                        )
+                        task = task.wait_for_task_output()
+
+                # 결과 처리
+                video_url = task.output[0]
+                st.session_state.messages.append(
+                    {
+                        "role": "user",
+                        "type": "video",
+                        "content": f"[{mode}] {prompt}",
+                        "data": video_url,
+                    }
+                )
+                st.session_state.uploader_key += 1
+                st.rerun()
+
             except Exception as e:
                 st.error(f"영상 생성 오류: {e}")
 
@@ -135,7 +163,7 @@ with left_col:
 with right_col:
     st.subheader("🎬 산출물 공유함")
     st.caption("마음에 드는 결과물을 다운로드해서 패들렛에 올려주세요!")
-    
+
     st.components.v1.iframe(
         "https://padlet.com/ludilab001/breakout-room/QgJV4Z6EyzZ84mBk-9od1vjG2akkEbNOy",
         height=800,
