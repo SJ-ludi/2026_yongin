@@ -1,4 +1,5 @@
 streamlit
 google-genai>=1.14.0
 runwayml
-pillow
+pillow>=10.1.0
+pillow-avif-plugin
