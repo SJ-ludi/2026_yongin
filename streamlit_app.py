@@ -104,7 +104,7 @@ with left_col:
         else:
             try:
                 if img_for_ai:
-                    # 이미지→영상
+                    # 이미지→영상 (gen4_turbo: 빠르고 저렴)
                     mode = "이미지→영상"
                     data_uri = pil_to_data_uri(img_for_ai)
                     with st.spinner(f"[{mode}] 영상을 만드는 중 (1~2분 소요)..."):
@@ -117,11 +117,11 @@ with left_col:
                         )
                         task = task.wait_for_task_output()
                 else:
-                    # 텍스트→영상
+                    # 텍스트→영상 (gen4.5만 텍스트 전용 지원)
                     mode = "텍스트→영상"
                     with st.spinner(f"[{mode}] 영상을 만드는 중 (1~2분 소요)..."):
                         task = runway_client.image_to_video.create(
-                            model="gen4_turbo",
+                            model="gen4.5",
                             prompt_text=prompt,
                             ratio="1280:720",
                             duration=5,
