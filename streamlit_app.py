@@ -27,8 +27,9 @@ if "uploader_key" not in st.session_state:
 
 def pil_to_data_uri(img: Image.Image) -> str:
     """PIL 이미지를 base64 data URI로 변환 (Runway API용)"""
+    img_rgb = img.convert("RGB")
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    img_rgb.save(buf, format="JPEG", quality=85)
     b64 = base64.b64encode(buf.getvalue()).decode()
     return f"data:image/jpeg;base64,{b64}"
 
@@ -41,28 +42,32 @@ with left_col:
     st.subheader("🎨 AI 생성 도구")
     st.caption("설명을 입력하고 이미지나 영상 버튼을 눌러보세요.")
 
-    # 파일 업로드
+    # 파일 업로드 (AVIF 포함)
     uploaded_file = st.file_uploader(
         "참고 이미지 (선택사항)",
-        type=["png", "jpg", "jpeg", "webp"],
+        type=["png", "jpg", "jpeg", "webp", "avif"],
         key=f"up_{st.session_state.uploader_key}",
     )
 
     img_for_ai = None
     if uploaded_file:
-        raw_img = Image.open(uploaded_file)
-        raw_img.thumbnail((1024, 1024))
-        st.image(raw_img, width=150, caption="참고 이미지")
-        img_for_ai = raw_img
+        try:
+            raw_img = Image.open(uploaded_file)
+            raw_img = raw_img.convert("RGB")  # AVIF·WebP 등 → RGB 변환
+            raw_img.thumbnail((1024, 1024))
+            st.image(raw_img, width=150, caption="참고 이미지")
+            img_for_ai = raw_img
+        except Exception as e:
+            st.error(f"이미지를 열 수 없습니다: {e}")
 
     # 프롬프트 입력
     prompt = st.text_input("무엇을 만들고 싶나요?", placeholder="예: 우주를 유영하는 고양이")
 
     # 참고 이미지 유무에 따른 모드 안내
     if img_for_ai:
-        st.info("📎 참고 이미지 있음 → 이미지 기반 생성 (이미지→이미지 / 이미지→영상)")
+        st.info("📎 참고 이미지 있음 → **이미지→이미지** 또는 **이미지→영상** 가능")
     else:
-        st.info("✏️ 텍스트만 입력 → 텍스트 기반 생성 (텍스트→이미지 / 텍스트→영상)")
+        st.info("✏️ 텍스트만 입력 → **텍스트→이미지** 가능")
 
     btn_col1, btn_col2 = st.columns(2)
 
@@ -97,44 +102,31 @@ with left_col:
             except Exception as e:
                 st.error(f"이미지 생성 오류: {e}")
 
-    # ===== 영상 생성 버튼 (Runway) =====
+    # ===== 영상 생성 버튼 (Runway) — 이미지 필수 =====
     if btn_col2.button("🎥 영상 생성", use_container_width=True):
         if not prompt:
             st.warning("설명을 입력해주세요!")
+        elif not img_for_ai:
+            st.warning("영상 생성에는 참고 이미지가 필요합니다! 이미지를 먼저 업로드해주세요.")
         else:
             try:
-                if img_for_ai:
-                    # 이미지→영상 (gen4_turbo: 빠르고 저렴)
-                    mode = "이미지→영상"
+                with st.spinner("[이미지→영상] 영상을 만드는 중 (1~2분 소요)..."):
                     data_uri = pil_to_data_uri(img_for_ai)
-                    with st.spinner(f"[{mode}] 영상을 만드는 중 (1~2분 소요)..."):
-                        task = runway_client.image_to_video.create(
-                            model="gen4_turbo",
-                            prompt_image=data_uri,
-                            prompt_text=prompt,
-                            ratio="1280:720",
-                            duration=5,
-                        )
-                        task = task.wait_for_task_output()
-                else:
-                    # 텍스트→영상 (gen4.5만 텍스트 전용 지원)
-                    mode = "텍스트→영상"
-                    with st.spinner(f"[{mode}] 영상을 만드는 중 (1~2분 소요)..."):
-                        task = runway_client.image_to_video.create(
-                            model="gen4.5",
-                            prompt_text=prompt,
-                            ratio="1280:720",
-                            duration=5,
-                        )
-                        task = task.wait_for_task_output()
+                    task = runway_client.image_to_video.create(
+                        model="gen4_turbo",
+                        prompt_image=data_uri,
+                        prompt_text=prompt,
+                        ratio="1280:720",
+                        duration=5,
+                    )
+                    task = task.wait_for_task_output()
 
-                # 결과 처리
                 video_url = task.output[0]
                 st.session_state.messages.append(
                     {
                         "role": "user",
                         "type": "video",
-                        "content": f"[{mode}] {prompt}",
+                        "content": f"[이미지→영상] {prompt}",
                         "data": video_url,
                     }
                 )
