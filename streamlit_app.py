@@ -81,7 +81,7 @@ with left_col:
                 with st.spinner(f"[{mode}] 이미지를 그리는 중..."):
                     contents = [img_for_ai, prompt] if img_for_ai else prompt
                     response = gemini_client.models.generate_content(
-                        model="gemini-2.0-flash-preview-image-generation",
+                        model="gemini-3.1-flash-image-preview",
                         contents=contents,
                         config=types.GenerateContentConfig(
                             response_modalities=["image", "text"],
