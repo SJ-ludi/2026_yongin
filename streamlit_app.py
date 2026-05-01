@@ -113,7 +113,7 @@ with left_col:
                 with st.spinner("[이미지→영상] 영상을 만드는 중 (1~2분 소요)..."):
                     data_uri = pil_to_data_uri(img_for_ai)
                     task = runway_client.image_to_video.create(
-                        model="gen4_turbo",
+                        model="gen4.5",
                         prompt_image=data_uri,
                         prompt_text=prompt,
                         ratio="1280:720",
