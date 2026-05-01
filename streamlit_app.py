@@ -117,7 +117,7 @@ with left_col:
                         prompt_image=data_uri,
                         prompt_text=prompt,
                         ratio="1280:720",
-                        duration=5,
+                        duration=7,
                     )
                     task = task.wait_for_task_output()
 
